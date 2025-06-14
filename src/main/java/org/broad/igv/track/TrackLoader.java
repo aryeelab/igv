@@ -66,6 +66,8 @@ import org.broad.igv.lists.GeneListManager;
 import org.broad.igv.logging.LogManager;
 import org.broad.igv.logging.Logger;
 import org.broad.igv.maf.MultipleAlignmentTrack;
+import org.broad.igv.multitrack.MultiTrackException;
+import org.broad.igv.multitrack.MultiTrackLoader;
 import org.broad.igv.prefs.PreferencesManager;
 import org.broad.igv.renderer.HeatmapRenderer;
 import org.broad.igv.renderer.MutationRenderer;
@@ -239,6 +241,8 @@ public class TrackLoader {
                 loadBedPEFile(locator, newTracks, genome);
             } else if (format.equals("clusters")) {
                 loadClusterFile(locator, newTracks, genome);
+            } else if (format.equals("mtrack")) {
+                loadMultiTrackFile(locator, newTracks, genome);
             } else if (CodecFactory.hasCodec(locator, genome) && !forceNotTribble(format)) {
                 loadTribbleFile(locator, newTracks, genome);
             } else if (MutationTrackLoader.isMutationAnnotationFile(locator)) {
@@ -442,6 +446,27 @@ public class TrackLoader {
         newTracks.add(new ClusterTrack(locator, features, genome));
     }
 
+    /**
+     * Load tracks from a multi-track file (.mtrack)
+     *
+     * @param locator The resource locator for the multi-track file
+     * @param newTracks List to add loaded tracks to
+     * @param genome The current genome
+     * @throws IOException If there are errors loading the file
+     */
+    private void loadMultiTrackFile(ResourceLocator locator, List<Track> newTracks, Genome genome) throws IOException {
+        try {
+            MultiTrackLoader loader = new MultiTrackLoader();
+            List<Track> tracks = loader.loadMultiTrackFile(locator, genome);
+            newTracks.addAll(tracks);
+
+            log.info("Successfully loaded " + tracks.size() + " tracks from multi-track file: " + locator.getPath());
+
+        } catch (MultiTrackException e) {
+            log.error("Error loading multi-track file: " + e.getUserMessage(), e);
+            throw new IOException("Failed to load multi-track file: " + e.getUserMessage(), e);
+        }
+    }
 
     /**
      * Load the input file as a feature, mutation, or maf (multiple alignment) file.

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<MultiTrack version="1">
+    <Resources>
+        <!-- A549 Cell Line Histone Modifications -->
+        <Resource name="A549 H3K4me3" path="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k04me3Etoh02Sig.bigWig" type="bigwig" description="H3K4me3 ChIP-seq signal in A549 cells - active promoter mark"/>
+        <Resource name="A549 H3K4me1" path="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k04me1Etoh02Sig.bigWig" type="bigwig" description="H3K4me1 ChIP-seq signal in A549 cells - enhancer mark"/>
+        <Resource name="A549 H3K27ac" path="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k27acEtoh02Sig.bigWig" type="bigwig" description="H3K27ac ChIP-seq signal in A549 cells - active enhancer mark"/>
+        <Resource name="A549 H3K27me3" path="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k27me3Etoh02Sig.bigWig" type="bigwig" description="H3K27me3 ChIP-seq signal in A549 cells - repressive mark"/>
+        <Resource name="A549 H3K36me3" path="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k36me3Dex100nmSig.bigWig" type="bigwig" description="H3K36me3 ChIP-seq signal in A549 cells - gene body mark"/>
+        <Resource name="A549 CTCF" path="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549CtcfEtoh02Sig.bigWig" type="bigwig" description="CTCF ChIP-seq signal in A549 cells - insulator protein"/>
+    </Resources>
+    <Tracks>
+        <!-- Active chromatin marks -->
+        <Track name="H3K4me3 (Promoters)" resourceId="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k04me3Etoh02Sig.bigWig" visible="true" height="50" color="0,150,0" autoScale="true">
+            <DataRange minimum="0" maximum="100" type="LINEAR"/>
+        </Track>
+        <Track name="H3K4me1 (Enhancers)" resourceId="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k04me1Etoh02Sig.bigWig" visible="true" height="50" color="50,200,50" autoScale="true">
+            <DataRange minimum="0" maximum="50" type="LINEAR"/>
+        </Track>
+        <Track name="H3K27ac (Active Enhancers)" resourceId="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k27acEtoh02Sig.bigWig" visible="true" height="50" color="255,165,0" autoScale="true">
+            <DataRange minimum="0" maximum="50" type="LINEAR"/>
+        </Track>
+        
+        <!-- Repressive marks -->
+        <Track name="H3K27me3 (Repressed)" resourceId="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k27me3Etoh02Sig.bigWig" visible="true" height="50" color="255,0,0" autoScale="true">
+            <DataRange minimum="0" maximum="40" type="LINEAR"/>
+        </Track>
+        
+        <!-- Gene body mark -->
+        <Track name="H3K36me3 (Gene Bodies)" resourceId="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549H3k36me3Dex100nmSig.bigWig" visible="true" height="50" color="0,0,255" autoScale="true">
+            <DataRange minimum="0" maximum="35" type="LINEAR"/>
+        </Track>
+        
+        <!-- Structural protein -->
+        <Track name="CTCF (Insulators)" resourceId="https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeBroadHistone/wgEncodeBroadHistoneA549CtcfEtoh02Sig.bigWig" visible="true" height="50" color="128,0,128" autoScale="true">
+            <DataRange minimum="0" maximum="25" type="LINEAR"/>
+        </Track>
+    </Tracks>
+</MultiTrack>

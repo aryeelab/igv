@@ -465,6 +465,10 @@ public class IGVMenuBar extends JMenuBar implements IGVEventObserver {
         menuAction.setToolTipText(UIConstants.LOAD_TRACKS_TOOLTIP);
         tracksMenu.add(MenuAndToolbarUtils.createMenuItem(menuAction));
 
+        // Add multi-track loading menu item
+        menuAction = new org.broad.igv.ui.action.LoadMultiTrackMenuAction("Load Multi-Track File...", KeyEvent.VK_M, igv);
+        tracksMenu.add(MenuAndToolbarUtils.createMenuItem(menuAction));
+
         tracksMenu.add(new JSeparator());
 
         // Track hubs

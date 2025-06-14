@@ -102,6 +102,20 @@ public class FileFormatUtils {
                 return firstLine.substring(13).toLowerCase();
             }
 
+            // Check for multi-track XML format
+            if (firstLine.trim().startsWith("<?xml") || firstLine.trim().startsWith("<MultiTrack")) {
+                // Look for MultiTrack root element in first few lines
+                String line = firstLine;
+                int lineCount = 0;
+                while (line != null && lineCount < 10) {
+                    if (line.contains("<MultiTrack")) {
+                        return "mtrack";
+                    }
+                    line = reader.readLine();
+                    lineCount++;
+                }
+            }
+
             // Read maximum of first 100 lines searching for format indication.
             int n = 0;
             String nextLine;
