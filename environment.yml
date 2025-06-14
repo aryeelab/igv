@@ -1,0 +1,8 @@
+name: igv
+channels:
+  - conda-forge
+dependencies:
+  - openjdk=21
+  - gradle
+  - git
+  - maven
