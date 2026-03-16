@@ -211,6 +211,8 @@ public class TrackLoader {
                 loadSMAPFile(locator, newTracks, genome);
             } else if (format.equals("dsi")) {
                 loadDSIFile(locator, newTracks, genome);
+            } else if (format.equals("counts")) {
+                loadFootprintTrack(locator, newTracks, genome);
             } else if (format.equals("bedpe") || format.equals("interact") || format.equals("hic")) {
                 loadBedPEFile(locator, newTracks, genome);
             } else if (format.equals("clusters")) {
@@ -527,6 +529,14 @@ public class TrackLoader {
         newTracks.add(t);
     }
 
+
+    private void loadFootprintTrack(ResourceLocator locator, List<Track> newTracks, Genome genome) throws IOException {
+        FootprintDataSource source = new FootprintDataSource(locator);
+        FootprintTrack track = new FootprintTrack(locator, source);
+        track.setName(locator.getTrackName());
+        track.setHeight(250);
+        newTracks.add(track);
+    }
 
     /**
      * Load GWAS PLINK result file

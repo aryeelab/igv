@@ -323,6 +323,8 @@ public class ResourceLocator {
             return "maf.dict";
         } else if (filename.endsWith("_clusters")) {
             return "bedpe";
+        } else if (filename.endsWith(".counts.tsv")) {
+            return "counts";
         } else {
             // Default - derive format from the extension.  If not a common format check special cases
             String format = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
