@@ -43,6 +43,11 @@ public class FootprintTrack extends AbstractTrack implements IGVEventObserver {
     private int fragLenMax = 150;
     private boolean applyScale = true;
 
+    // Color scale: NaN means auto (0 for min, 98th percentile for max)
+    private float colorScaleMin = Float.NaN;
+    private float colorScaleMax = Float.NaN;
+    private String paletteName = "Magma";
+
     public FootprintTrack(ResourceLocator locator, FootprintDataSource dataSource) {
         super(locator);
         this.dataSource = dataSource;
@@ -120,7 +125,7 @@ public class FootprintTrack extends AbstractTrack implements IGVEventObserver {
             GraphicUtils.drawCenteredText("Zoom in to see footprint data", rect, g);
             return;
         }
-        renderer.render(matrix, context, rect);
+        renderer.render(matrix, context, rect, colorScaleMin, colorScaleMax, paletteName);
     }
 
     public void clearCaches() {
@@ -201,6 +206,80 @@ public class FootprintTrack extends AbstractTrack implements IGVEventObserver {
         menu.add(fragRangeItem);
 
         menu.addSeparator();
+
+        // Color scale range
+        // Compute effective auto range from current matrix for display
+        String autoRangeStr = null;
+        ReferenceFrame clickFrame = te != null ? te.getFrame() : null;
+        if (clickFrame == null) {
+            clickFrame = FrameManager.getDefaultFrame();
+        }
+        if (clickFrame != null) {
+            LoadedDataInterval<FootprintMatrix> clickInterval = loadedIntervalCache.get(clickFrame.getName());
+            if (clickInterval != null && clickInterval.getFeatures() != null) {
+                FootprintMatrix clickMatrix = clickInterval.getFeatures();
+                float autoMin = 0;
+                float autoMax = clickMatrix.getPercentile(98);
+                autoRangeStr = String.format("%.1f - %.1f", autoMin, autoMax);
+            }
+        }
+        String rangeLabel = Float.isNaN(colorScaleMin) ? "Auto" :
+                String.format("%.1f - %.1f", colorScaleMin, colorScaleMax);
+        JMenuItem colorRangeItem = new JMenuItem("Set Color Scale Range (" + rangeLabel + ")...");
+        final String effectiveAutoRange = autoRangeStr;
+        colorRangeItem.addActionListener(e -> {
+            String defaultVal;
+            if (!Float.isNaN(colorScaleMin)) {
+                defaultVal = String.format("%.1f - %.1f", colorScaleMin, colorScaleMax);
+            } else if (effectiveAutoRange != null) {
+                defaultVal = effectiveAutoRange;
+            } else {
+                defaultVal = "auto";
+            }
+            String result = JOptionPane.showInputDialog(
+                    IGV.getInstance().getMainFrame(),
+                    "Color scale range (min - max), or 'auto':", defaultVal);
+            if (result != null) {
+                result = result.trim();
+                if (result.equalsIgnoreCase("auto")) {
+                    colorScaleMin = Float.NaN;
+                    colorScaleMax = Float.NaN;
+                    IGV.getInstance().repaint();
+                } else if (result.contains("-")) {
+                    try {
+                        // Handle negative numbers: split on " - " first, fall back to "-"
+                        String[] parts;
+                        if (result.contains(" - ")) {
+                            parts = result.split(" - ");
+                        } else {
+                            parts = result.split("-", 2);
+                        }
+                        colorScaleMin = Float.parseFloat(parts[0].trim());
+                        colorScaleMax = Float.parseFloat(parts[1].trim());
+                        IGV.getInstance().repaint();
+                    } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
+                        // ignore
+                    }
+                }
+            }
+        });
+        menu.add(colorRangeItem);
+
+        // Color palette submenu
+        JMenu paletteMenu = new JMenu("Color Palette");
+        ButtonGroup paletteGroup = new ButtonGroup();
+        for (String name : FootprintRenderer.getAvailablePalettes()) {
+            JRadioButtonMenuItem paletteItem = new JRadioButtonMenuItem(name, name.equals(paletteName));
+            paletteItem.addActionListener(e -> {
+                paletteName = name;
+                IGV.getInstance().repaint();
+            });
+            paletteGroup.add(paletteItem);
+            paletteMenu.add(paletteItem);
+        }
+        menu.add(paletteMenu);
+
+        menu.addSeparator();
         TrackMenuUtils.addSharedItems(menu, List.of(this));
 
         return menu;
@@ -216,5 +295,11 @@ public class FootprintTrack extends AbstractTrack implements IGVEventObserver {
     public void setFragLenMax(int fragLenMax) { this.fragLenMax = fragLenMax; }
     public boolean isApplyScale() { return applyScale; }
     public void setApplyScale(boolean applyScale) { this.applyScale = applyScale; }
+    public float getColorScaleMin() { return colorScaleMin; }
+    public void setColorScaleMin(float colorScaleMin) { this.colorScaleMin = colorScaleMin; }
+    public float getColorScaleMax() { return colorScaleMax; }
+    public void setColorScaleMax(float colorScaleMax) { this.colorScaleMax = colorScaleMax; }
+    public String getPaletteName() { return paletteName; }
+    public void setPaletteName(String paletteName) { this.paletteName = paletteName; }
 }
 
