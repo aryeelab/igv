@@ -326,6 +326,71 @@ tasks.register('createMacAppDist', Copy) {
     }
 }
 
+// Build a Mac .app bundle using a shell script launcher (classpath mode) with a bundled JDK.
+// Usage: ./gradlew createMacAppDistLocal -PjdkBundleMac=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+tasks.register('createMacAppDistLocal', Copy) {
+    dependsOn createDist
+
+    // App skeleton (PkgInfo, Resources dir, icon)
+    with copySpec {
+        from("scripts/mac.app") {
+            exclude "Contents/Info.plist.template"
+            exclude "Contents/MacOS/IGV"
+            exclude "Contents/MacOS/IGV.sh"
+            exclude "Contents/MacOS/main.c"
+        }
+        into "IGV_${version}.app"
+    }
+    // Shell script launcher (renamed to IGV so Info.plist CFBundleExecutable works)
+    with copySpec {
+        from("scripts/mac.app/Contents/MacOS/IGV.sh")
+        rename "IGV.sh", "IGV"
+        into "IGV_${version}.app/Contents/MacOS"
+        fileMode 0755
+    }
+    // Info.plist with version substitution
+    with copySpec {
+        from("scripts/mac.app/Contents/Info.plist.template")
+        filter(ReplaceTokens, tokens: [VERSION: version])
+        rename "Info.plist.template", "Info.plist"
+        into "IGV_${version}.app/Contents"
+    }
+    // App icon
+    with copySpec {
+        from("web/IGV_64.png")
+        into "IGV_${version}.app/Contents/Resources"
+    }
+    // igv.args
+    with copySpec {
+        from("${buildDir}/IGV-dist/") include 'igv.args'
+        into "IGV_${version}.app/Contents/Java/"
+    }
+    // All dependency jars
+    with copySpec {
+        from("${buildDir}/IGV-dist/lib") include '*.jar'
+        into "IGV_${version}.app/Contents/Java/lib"
+    }
+    // Bundled JDK
+    with copySpec {
+        from jdkBundleMac
+        into "IGV_${version}.app/Contents/jdk-21"
+    }
+
+    into "${buildDir}/IGV-MacApp-dist"
+
+    doLast {
+        if (jdkBundleMac == "") {
+            throw new GradleException("Required property not set: jdkBundleMac. Pass -PjdkBundleMac=/path/to/jdk-21")
+        }
+        project.exec { commandLine('chmod', '775', "${buildDir}/IGV-MacApp-dist/IGV_${version}.app") }
+        project.exec { commandLine('chmod', '+x', "${buildDir}/IGV-MacApp-dist/IGV_${version}.app/Contents/MacOS/IGV") }
+
+        project.delete(
+                files("${buildDir}/IGV-MacApp-dist/IGV_${version}.app/Contents/Java/lib/snappy-java-1.1.10.5-module.jar")
+        )
+    }
+}
+
 tasks.register('createMacAppDistZip', Zip) {
     dependsOn createMacAppDist
     archiveFileName = "IGV_MacApp_${version}.zip"
