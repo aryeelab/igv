@@ -1,6 +1,6 @@
 package org.igv.renderer;
 
-import org.igv.track.FootprintMatrix;
+import org.igv.track.Heatmap2DMatrix;
 import org.igv.track.RenderContext;
 
 import java.awt.*;
@@ -10,10 +10,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Renderer for 2D footprint heatmap data.
- * Maps a FootprintMatrix to a BufferedImage using a configurable colormap and data range.
+ * Renderer for 2D heatmap data.
+ * Maps a Heatmap2DMatrix to a BufferedImage using a configurable colormap and data range.
  */
-public class FootprintRenderer {
+public class Heatmap2DRenderer {
 
     /**
      * Available color palettes.
@@ -79,14 +79,14 @@ public class FootprintRenderer {
     /**
      * Render the 2D heatmap matrix into the given rectangle.
      *
-     * @param matrix      the footprint data matrix
+     * @param matrix      the heatmap data matrix
      * @param context     render context with graphics and frame info
      * @param rect        the rectangle to draw into
      * @param colorMin    minimum value for color mapping (NaN = auto)
      * @param colorMax    maximum value for color mapping (NaN = auto)
      * @param paletteName name of the color palette to use
      */
-    public void render(FootprintMatrix matrix, RenderContext context, Rectangle rect,
+    public void render(Heatmap2DMatrix matrix, RenderContext context, Rectangle rect,
                        float colorMin, float colorMax, String paletteName) {
         if (matrix == null || matrix.getNumRows() == 0 || matrix.getNumCols() == 0) {
             return;
@@ -138,18 +138,17 @@ public class FootprintRenderer {
 
         g2d.drawImage(image, rect.x, rect.y, null);
 
-        // Draw Y-axis labels (fragment length ticks every 20)
+        // Draw Y-axis labels every 20 units
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("SansSerif", Font.PLAIN, 10));
         FontMetrics fm = g2d.getFontMetrics();
-        int fragMin = matrix.getFragLenMin();
-        int fragMax = matrix.getFragLenMax();
-        for (int fragLen = ((fragMin / 20) + 1) * 20; fragLen <= fragMax; fragLen += 20) {
-            int row = fragLen - fragMin;
-            int y = rect.y + imgHeight - (int) ((double) row / numRows * imgHeight);
-            String label = String.valueOf(fragLen);
-            g2d.drawString(label, rect.x + 3, y + fm.getAscent() / 2);
+        int yMin = matrix.getYMin();
+        int yMax = matrix.getYMax();
+        for (int yValue = ((yMin / 20) + 1) * 20; yValue <= yMax; yValue += 20) {
+            int row = yValue - yMin;
+            int yPixel = rect.y + imgHeight - (int) ((double) row / numRows * imgHeight);
+            String label = String.valueOf(yValue);
+            g2d.drawString(label, rect.x + 3, yPixel + fm.getAscent() / 2);
         }
     }
 }
-

@@ -212,7 +212,7 @@ public class TrackLoader {
             } else if (format.equals("dsi")) {
                 loadDSIFile(locator, newTracks, genome);
             } else if (format.equals("counts")) {
-                loadFootprintTrack(locator, newTracks, genome);
+                loadHeatmap2DTrack(locator, newTracks, genome);
             } else if (format.equals("bedpe") || format.equals("interact") || format.equals("hic")) {
                 loadBedPEFile(locator, newTracks, genome);
             } else if (format.equals("clusters")) {
@@ -530,9 +530,9 @@ public class TrackLoader {
     }
 
 
-    private void loadFootprintTrack(ResourceLocator locator, List<Track> newTracks, Genome genome) throws IOException {
-        FootprintDataSource source = new FootprintDataSource(locator);
-        FootprintTrack track = new FootprintTrack(locator, source);
+    private void loadHeatmap2DTrack(ResourceLocator locator, List<Track> newTracks, Genome genome) throws IOException {
+        Heatmap2DDataSource source = new Heatmap2DDataSource(locator);
+        Heatmap2DTrack track = new Heatmap2DTrack(locator, source);
         track.setName(locator.getTrackName());
         track.setHeight(250);
         newTracks.add(track);
