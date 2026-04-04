@@ -3,6 +3,27 @@
 # Get the directory of this script (Contents/MacOS)
 DIR="$(cd "$(dirname "$0")" && pwd)"
 CONTENTS="$(dirname "$DIR")"
+BUNDLED_GENOMES_DIR="${CONTENTS}/Resources/genomes"
+USER_GENOMES_DIR="${HOME}/igv/genomes"
+
+install_bundled_genomes() {
+    if [ ! -d "${BUNDLED_GENOMES_DIR}" ]; then
+        return
+    fi
+
+    mkdir -p "${USER_GENOMES_DIR}"
+
+    for genome_file in "${BUNDLED_GENOMES_DIR}"/*.json; do
+        [ -e "${genome_file}" ] || continue
+
+        target="${USER_GENOMES_DIR}/$(basename "${genome_file}")"
+        if [ ! -e "${target}" ]; then
+            cp "${genome_file}" "${target}"
+        fi
+    done
+}
+
+install_bundled_genomes
 
 # Use bundled JDK if available
 if [ -d "${CONTENTS}/jdk-21" ]; then
@@ -31,4 +52,3 @@ exec java -Xmx8g \
     ${JAVA_ARGS} \
     -cp "$CP" \
     org.igv.ui.Main "$@"
-
