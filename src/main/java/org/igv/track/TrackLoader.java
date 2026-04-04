@@ -3,6 +3,7 @@ package org.igv.track;
 import htsjdk.tribble.AsciiFeatureCodec;
 import htsjdk.tribble.Feature;
 import htsjdk.variant.vcf.VCFHeader;
+import htsjdk.samtools.util.IOUtil;
 import org.igv.bedpe.*;
 import org.igv.blast.BlastMapping;
 import org.igv.blast.BlastParser;
@@ -531,11 +532,29 @@ public class TrackLoader {
 
 
     private void loadHeatmap2DTrack(ResourceLocator locator, List<Track> newTracks, Genome genome) throws IOException {
+        validateHeatmap2DInput(locator);
         Heatmap2DDataSource source = new Heatmap2DDataSource(locator);
         Heatmap2DTrack track = new Heatmap2DTrack(locator, source);
         track.setName(locator.getTrackName());
         track.setHeight(250);
         newTracks.add(track);
+    }
+
+    private void validateHeatmap2DInput(ResourceLocator locator) throws IOException {
+        String resourcePath = locator.getURLPath();
+        if (!IOUtil.hasBlockCompressedExtension(resourcePath)) {
+            throw new DataLoadException("Heatmap2D requires a bgzip-compressed .counts.tsv.gz file: " + locator.getPath(),
+                    locator.getPath());
+        }
+
+        String indexPath = locator.getIndexPath();
+        if (indexPath == null || indexPath.isBlank()) {
+            indexPath = ResourceLocator.indexFile(locator);
+        }
+        if (indexPath == null || indexPath.isBlank() || !FileUtils.resourceExists(indexPath)) {
+            throw new DataLoadException("Heatmap2D requires a tabix index for " + locator.getPath(),
+                    indexPath == null ? locator.getPath() : indexPath);
+        }
     }
 
     /**

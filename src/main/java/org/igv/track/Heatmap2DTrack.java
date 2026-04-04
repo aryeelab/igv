@@ -20,6 +20,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Track for displaying 2D heatmap data from .counts.tsv.gz files.
@@ -28,6 +30,10 @@ import java.util.Map;
 public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
 
     private static final Logger log = LogManager.getLogger(Heatmap2DTrack.class);
+    private static final Pattern SIGNED_RANGE_PATTERN = Pattern.compile("^\\s*(-?\\d+)\\s*-\\s*(-?\\d+)\\s*$");
+    private static final Pattern SIGNED_FLOAT_RANGE_PATTERN = Pattern.compile(
+            "^\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*-\\s*" +
+                    "([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*$");
 
     private final Heatmap2DDataSource dataSource;
     private final Heatmap2DRenderer renderer;
@@ -135,6 +141,11 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
     @Override
     public void unload() {
         super.unload();
+        try {
+            dataSource.close();
+        } catch (IOException e) {
+            log.warn("Error closing Heatmap2D data source", e);
+        }
         IGVEventBus.getInstance().unsubscribe(this);
     }
 
@@ -191,13 +202,15 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
             String result = JOptionPane.showInputDialog(
                     IGV.getInstance().getMainFrame(),
                     "Y-axis range (min-max):", yMin + "-" + yMax);
-            if (result != null && result.contains("-")) {
+            if (result != null) {
                 try {
-                    String[] parts = result.split("-");
-                    yMin = Integer.parseInt(parts[0].trim());
-                    yMax = Integer.parseInt(parts[1].trim());
-                    clearCaches();
-                    IGV.getInstance().repaint();
+                    int[] range = parseRange(result);
+                    if (range != null) {
+                        yMin = range[0];
+                        yMax = range[1];
+                        clearCaches();
+                        IGV.getInstance().repaint();
+                    }
                 } catch (NumberFormatException ex) {
                     // ignore
                 }
@@ -245,18 +258,14 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
                     colorScaleMin = Float.NaN;
                     colorScaleMax = Float.NaN;
                     IGV.getInstance().repaint();
-                } else if (result.contains("-")) {
+                } else {
                     try {
-                        // Handle negative numbers: split on " - " first, fall back to "-"
-                        String[] parts;
-                        if (result.contains(" - ")) {
-                            parts = result.split(" - ");
-                        } else {
-                            parts = result.split("-", 2);
+                        float[] range = parseFloatRange(result);
+                        if (range != null) {
+                            colorScaleMin = range[0];
+                            colorScaleMax = range[1];
+                            IGV.getInstance().repaint();
                         }
-                        colorScaleMin = Float.parseFloat(parts[0].trim());
-                        colorScaleMax = Float.parseFloat(parts[1].trim());
-                        IGV.getInstance().repaint();
                     } catch (NumberFormatException | ArrayIndexOutOfBoundsException ex) {
                         // ignore
                     }
@@ -301,4 +310,37 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
     public void setColorScaleMax(float colorScaleMax) { this.colorScaleMax = colorScaleMax; }
     public String getPaletteName() { return paletteName; }
     public void setPaletteName(String paletteName) { this.paletteName = paletteName; }
+
+    static int[] parseRange(String text) {
+        Matcher matcher = SIGNED_RANGE_PATTERN.matcher(text);
+        if (!matcher.matches()) {
+            return null;
+        }
+        int min = Integer.parseInt(matcher.group(1));
+        int max = Integer.parseInt(matcher.group(2));
+        if (min > max) {
+            int tmp = min;
+            min = max;
+            max = tmp;
+        }
+        return new int[]{
+                min,
+                max
+        };
+    }
+
+    static float[] parseFloatRange(String text) {
+        Matcher matcher = SIGNED_FLOAT_RANGE_PATTERN.matcher(text);
+        if (!matcher.matches()) {
+            return null;
+        }
+        float min = Float.parseFloat(matcher.group(1));
+        float max = Float.parseFloat(matcher.group(2));
+        if (min > max) {
+            float tmp = min;
+            min = max;
+            max = tmp;
+        }
+        return new float[]{min, max};
+    }
 }

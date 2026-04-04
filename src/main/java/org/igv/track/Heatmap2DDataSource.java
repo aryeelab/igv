@@ -1,90 +1,81 @@
 package org.igv.track;
 
-import htsjdk.samtools.util.BlockCompressedInputStream;
-import org.igv.logging.LogManager;
-import org.igv.logging.Logger;
+import htsjdk.samtools.seekablestream.SeekableStream;
+import htsjdk.samtools.util.IOUtil;
+import htsjdk.tribble.readers.TabixReader;
+import org.igv.util.FileUtils;
+import org.igv.util.ParsingUtils;
 import org.igv.util.ResourceLocator;
+import org.igv.util.stream.IGVSeekableStreamFactory;
 
-import java.io.*;
-import java.util.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Data source for 2D heatmap count matrix files (.counts.tsv.gz).
  * Reads a bgzip-compressed TSV with columns: chrom, midpoint, length, count.
- * Parses scale factors from the file header and builds 2D matrices for given genomic ranges.
- * <p>
- * All records are loaded into memory on first access (the files are typically small,
- * ~100k records). This avoids issues with htsjdk's TabixReader.getIntv() which cannot
- * parse float-valued position columns like "23232514.0".
+ * Parses scale factors from the file header and builds 2D matrices for genomic
+ * windows using tabix queries against the visible region.
  */
-public class Heatmap2DDataSource {
+public class Heatmap2DDataSource implements AutoCloseable {
 
-    private static final Logger log = LogManager.getLogger(Heatmap2DDataSource.class);
     private static final int MAX_RANGE_BP = 100_000;  // Maximum viewport width before refusing to load
 
     private final String path;
+    private final String indexPath;
+    private final TabixReader tabixReader;
     private Map<Integer, Double> scaleFactors;
-
-    // In-memory record store, keyed by chromosome, sorted by position
-    private Map<String, List<Record>> recordsByChrom;
-
-    static class Record implements Comparable<Record> {
-        final int position;   // rounded midpoint
-        final int y;
-        final int count;
-
-        Record(int position, int y, int count) {
-            this.position = position;
-            this.y = y;
-            this.count = count;
-        }
-
-        @Override
-        public int compareTo(Record o) {
-            return Integer.compare(this.position, o.position);
-        }
-    }
 
     public Heatmap2DDataSource(ResourceLocator locator) throws IOException {
         this.path = locator.getPath();
-        loadAll();
+        this.indexPath = resolveIndexPath(locator);
+        validateIndexedInput();
+        this.scaleFactors = loadScaleFactors(locator);
+
+        SeekableStream stream = IGVSeekableStreamFactory.getInstance().getStreamFor(path);
+        this.tabixReader = new TabixReader(path, indexPath, stream);
+    }
+
+    private String resolveIndexPath(ResourceLocator locator) {
+        String candidate = locator.getIndexPath();
+        if (candidate == null || candidate.isBlank()) {
+            candidate = ResourceLocator.indexFile(locator);
+        }
+        return candidate;
+    }
+
+    private void validateIndexedInput() throws IOException {
+        if (!IOUtil.hasBlockCompressedExtension(path.split("\\?", 2)[0])) {
+            throw new IOException("Heatmap2D requires a bgzip-compressed .counts.tsv.gz file: " + path);
+        }
+        if (indexPath == null || indexPath.isBlank() || !FileUtils.resourceExists(indexPath)) {
+            throw new IOException("Heatmap2D requires a tabix index for " + path +
+                    " (expected " + (indexPath == null ? "<unknown>" : indexPath) + ")");
+        }
     }
 
     /**
-     * Read the entire bgzip file: parse header for scale factors, then load all records.
+     * Parse the file header to extract scale factors.
      */
-    private void loadAll() throws IOException {
-        scaleFactors = new HashMap<>();
-        recordsByChrom = new HashMap<>();
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new BlockCompressedInputStream(new FileInputStream(path))))) {
+    private Map<Integer, Double> loadScaleFactors(ResourceLocator locator) throws IOException {
+        Map<Integer, Double> factors = new HashMap<>();
+        try (BufferedReader reader = ParsingUtils.openBufferedReader(locator)) {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.startsWith("#")) {
-                    if (line.startsWith("# scale_factors:")) {
-                        String dictStr = line.substring("# scale_factors:".length()).trim();
-                        scaleFactors = parsePythonDict(dictStr);
-                    }
-                    continue;
+                if (!line.startsWith("#")) {
+                    break;
                 }
-                String[] fields = line.split("\t");
-                if (fields.length < 4) continue;
-                String chr = fields[0];
-                int pos = (int) Math.round(Double.parseDouble(fields[1]));
-                int y = Integer.parseInt(fields[2]);
-                int count = Integer.parseInt(fields[3]);
-                recordsByChrom.computeIfAbsent(chr, k -> new ArrayList<>())
-                        .add(new Record(pos, y, count));
+                if (line.startsWith("# scale_factors:")) {
+                    String dictStr = line.substring("# scale_factors:".length()).trim();
+                    factors = parsePythonDict(dictStr);
+                }
             }
         }
-
-        // Sort each chromosome's records by position
-        for (List<Record> records : recordsByChrom.values()) {
-            Collections.sort(records);
-        }
+        return factors;
     }
 
     /**
@@ -93,12 +84,10 @@ public class Heatmap2DDataSource {
      */
     static Map<Integer, Double> parsePythonDict(String dictStr) {
         Map<Integer, Double> result = new HashMap<>();
-        // Remove braces
         dictStr = dictStr.trim();
         if (dictStr.startsWith("{")) dictStr = dictStr.substring(1);
         if (dictStr.endsWith("}")) dictStr = dictStr.substring(0, dictStr.length() - 1);
 
-        // Match key: value pairs
         Pattern pattern = Pattern.compile("(\\d+)\\s*:\\s*([\\d.eE+\\-]+)");
         Matcher matcher = pattern.matcher(dictStr);
         while (matcher.find()) {
@@ -129,37 +118,40 @@ public class Heatmap2DDataSource {
 
         int range = end - start + 1;
         if (range > MAX_RANGE_BP || range <= 0) {
-            return null;  // Too wide — caller should show "zoom in" message
+            return null;
         }
 
         int numRows = yMax - yMin + 1;
         int numCols = range;
         float[][] matrix = new float[numRows][numCols];
 
-        // Query in-memory records using binary search
-        List<Record> chrRecords = recordsByChrom.get(chr);
-        if (chrRecords != null) {
-            // Find first record at or after 'start'
-            int idx = Collections.binarySearch(chrRecords, new Record(start, 0, 0));
-            if (idx < 0) idx = -(idx + 1);
+        TabixReader.Iterator iterator = tabixReader.query(chr, start + 1, end);
+        if (iterator != null) {
+            String line;
+            while ((line = iterator.next()) != null) {
+                if (line.startsWith("#")) {
+                    continue;
+                }
+                String[] fields = line.split("\t");
+                if (fields.length < 4) {
+                    continue;
+                }
 
-            for (int i = idx; i < chrRecords.size(); i++) {
-                Record rec = chrRecords.get(i);
-                if (rec.position > end) break;
-
-                int y = rec.y;
-                if (y > yMax) y = yMax;
-                if (y < yMin) continue;
+                int pos = (int) Math.round(Double.parseDouble(fields[1]));
+                int y = Integer.parseInt(fields[2]);
+                int count = Integer.parseInt(fields[3]);
+                if (y < yMin || y > yMax) {
+                    continue;
+                }
 
                 int row = y - yMin;
-                int col = rec.position - start;
+                int col = pos - start;
                 if (col >= 0 && col < numCols && row >= 0 && row < numRows) {
-                    matrix[row][col] += rec.count;
+                    matrix[row][col] += count;
                 }
             }
         }
 
-        // Apply scale factors
         if (applyScale && !scaleFactors.isEmpty()) {
             for (int row = 0; row < numRows; row++) {
                 int y = row + yMin;
@@ -172,12 +164,10 @@ public class Heatmap2DDataSource {
             }
         }
 
-        // Apply Gaussian smoothing
         if (sigma > 0) {
             matrix = gaussianSmooth(matrix, sigma);
         }
 
-        // Apply log2(1+x) transform
         if (logTransform) {
             double log2 = Math.log(2);
             for (int row = 0; row < numRows; row++) {
@@ -201,7 +191,6 @@ public class Heatmap2DDataSource {
         if (rows == 0) return matrix;
         int cols = matrix[0].length;
 
-        // Build 1D Gaussian kernel
         int radius = (int) Math.ceil(3 * sigma);
         int kernelSize = 2 * radius + 1;
         float[] kernel = new float[kernelSize];
@@ -215,7 +204,6 @@ public class Heatmap2DDataSource {
             kernel[i] /= sum;
         }
 
-        // Horizontal pass
         float[][] temp = new float[rows][cols];
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
@@ -230,7 +218,6 @@ public class Heatmap2DDataSource {
             }
         }
 
-        // Vertical pass
         float[][] result = new float[rows][cols];
         for (int c = 0; c < cols; c++) {
             for (int r = 0; r < rows; r++) {
@@ -250,5 +237,10 @@ public class Heatmap2DDataSource {
 
     public Map<Integer, Double> getScaleFactors() {
         return scaleFactors;
+    }
+
+    @Override
+    public void close() throws IOException {
+        tabixReader.close();
     }
 }
