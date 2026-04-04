@@ -1,8 +1,10 @@
 package org.igv.track;
 
 import htsjdk.samtools.seekablestream.SeekableStream;
+import htsjdk.samtools.util.BlockCompressedInputStream;
 import htsjdk.samtools.util.IOUtil;
-import htsjdk.tribble.readers.TabixReader;
+import htsjdk.tribble.index.Block;
+import htsjdk.tribble.index.tabix.TabixIndex;
 import org.igv.util.FileUtils;
 import org.igv.util.ParsingUtils;
 import org.igv.util.ResourceLocator;
@@ -10,6 +12,9 @@ import org.igv.util.stream.IGVSeekableStreamFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -23,11 +28,10 @@ import java.util.regex.Pattern;
  */
 public class Heatmap2DDataSource implements AutoCloseable {
 
-    private static final int MAX_RANGE_BP = 100_000;  // Maximum viewport width before refusing to load
-
     private final String path;
     private final String indexPath;
-    private final TabixReader tabixReader;
+    private final TabixIndex tabixIndex;
+    private final BlockCompressedInputStream dataInputStream;
     private Map<Integer, Double> scaleFactors;
 
     public Heatmap2DDataSource(ResourceLocator locator) throws IOException {
@@ -36,8 +40,13 @@ public class Heatmap2DDataSource implements AutoCloseable {
         validateIndexedInput();
         this.scaleFactors = loadScaleFactors(locator);
 
+        try (SeekableStream indexStream = IGVSeekableStreamFactory.getInstance().getStreamFor(indexPath);
+             BlockCompressedInputStream indexInput = new BlockCompressedInputStream(indexStream)) {
+            this.tabixIndex = new TabixIndex(indexInput);
+        }
+
         SeekableStream stream = IGVSeekableStreamFactory.getInstance().getStreamFor(path);
-        this.tabixReader = new TabixReader(path, indexPath, stream);
+        this.dataInputStream = new BlockCompressedInputStream(stream);
     }
 
     private String resolveIndexPath(ResourceLocator locator) {
@@ -117,7 +126,7 @@ public class Heatmap2DDataSource implements AutoCloseable {
                                      boolean applyScale) throws IOException {
 
         int range = end - start + 1;
-        if (range > MAX_RANGE_BP || range <= 0) {
+        if (range <= 0) {
             return null;
         }
 
@@ -125,30 +134,41 @@ public class Heatmap2DDataSource implements AutoCloseable {
         int numCols = range;
         float[][] matrix = new float[numRows][numCols];
 
-        TabixReader.Iterator iterator = tabixReader.query(chr, start + 1, end);
-        if (iterator != null) {
-            String line;
-            while ((line = iterator.next()) != null) {
-                if (line.startsWith("#")) {
-                    continue;
-                }
-                String[] fields = line.split("\t");
-                if (fields.length < 4) {
-                    continue;
-                }
+        List<Block> blocks = new ArrayList<>(tabixIndex.getBlocks(chr, start + 1, end));
+        if (blocks.isEmpty()) {
+            return null;
+        }
 
-                int pos = (int) Math.round(Double.parseDouble(fields[1]));
-                int y = Integer.parseInt(fields[2]);
-                int count = Integer.parseInt(fields[3]);
-                if (y < yMin || y > yMax) {
-                    continue;
-                }
+        blocks.sort(Comparator.comparingLong(Block::getStartPosition));
+        dataInputStream.seek(blocks.get(0).getStartPosition());
+        String line;
+        while ((line = dataInputStream.readLine()) != null) {
+            if (line.isEmpty() || line.charAt(0) == '#') {
+                continue;
+            }
+            String[] fields = line.split("\t");
+            if (fields.length < 4) {
+                continue;
+            }
 
-                int row = y - yMin;
-                int col = pos - start;
-                if (col >= 0 && col < numCols && row >= 0 && row < numRows) {
-                    matrix[row][col] += count;
-                }
+            int pos = (int) Math.round(Double.parseDouble(fields[1]));
+            if (pos > end) {
+                break;
+            }
+            if (pos < start) {
+                continue;
+            }
+
+            int y = Integer.parseInt(fields[2]);
+            if (y < yMin || y > yMax) {
+                continue;
+            }
+
+            int count = Integer.parseInt(fields[3]);
+            int row = y - yMin;
+            int col = pos - start;
+            if (col >= 0 && col < numCols && row >= 0 && row < numRows) {
+                matrix[row][col] += count;
             }
         }
 
@@ -241,6 +261,6 @@ public class Heatmap2DDataSource implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        tabixReader.close();
+        dataInputStream.close();
     }
 }

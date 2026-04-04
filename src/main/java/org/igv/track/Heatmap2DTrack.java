@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
 
     private static final Logger log = LogManager.getLogger(Heatmap2DTrack.class);
+    private static final int MAX_VIEW_WINDOW_BP = 40_000;
     private static final Pattern SIGNED_RANGE_PATTERN = Pattern.compile("^\\s*(-?\\d+)\\s*-\\s*(-?\\d+)\\s*$");
     private static final Pattern SIGNED_FLOAT_RANGE_PATTERN = Pattern.compile(
             "^\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*-\\s*" +
@@ -43,10 +44,10 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
             Collections.synchronizedMap(new HashMap<>());
 
     // User-configurable parameters
-    private double sigma = 1.0;
-    private boolean logTransform = true;
-    private int yMin = 25;
-    private int yMax = 150;
+    private double sigma = 10.0;
+    private boolean logTransform = false;
+    private int yMin = 30;
+    private int yMax = 160;
     private boolean applyScale = true;
 
     // Color scale: NaN means auto (0 for min, 98th percentile for max)
@@ -58,7 +59,7 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
         super(locator);
         this.dataSource = dataSource;
         this.renderer = new Heatmap2DRenderer();
-        setHeight(250);
+        setHeight(80);
         IGVEventBus.getInstance().subscribe(FrameManager.ChangeEvent.class, this);
     }
 
@@ -83,15 +84,11 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
         String chr = frame.getChrName();
         int start = (int) frame.getOrigin();
         int end = (int) frame.getEnd();
-        LoadedDataInterval<Heatmap2DMatrix> interval = loadedIntervalCache.get(frame.getName());
-        if (interval == null || !interval.contains(chr, start, end)) return false;
-        // If the cached matrix is null (viewport was too wide), only consider ready
-        // if the viewport is still too wide. Otherwise, reload to get actual data.
-        if (interval.getFeatures() == null) {
-            int range = end - start;
-            return range > 100_000;  // still too wide, no point reloading
+        if (end - start > MAX_VIEW_WINDOW_BP) {
+            return false;
         }
-        return true;
+        LoadedDataInterval<Heatmap2DMatrix> interval = loadedIntervalCache.get(frame.getName());
+        return interval != null && interval.contains(chr, start, end) && interval.getFeatures() != null;
     }
 
     @Override
@@ -101,6 +98,12 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
         String chr = referenceFrame.getChrName();
         int start = (int) referenceFrame.getOrigin();
         int end = (int) referenceFrame.getEnd() + 1;
+
+        if (end - start > MAX_VIEW_WINDOW_BP) {
+            loadedIntervalCache.put(referenceFrame.getName(),
+                    new LoadedDataInterval<>(chr, start, end, null));
+            return;
+        }
 
         // Expand range by 50% for panning
         int w = end - start;
@@ -126,7 +129,7 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
 
         Heatmap2DMatrix matrix = interval.getFeatures();
         if (matrix == null) {
-            // Data source returned null - viewport too wide
+            // Data source returned null - no data available for this viewport
             Graphics2D g = context.getGraphic2DForColor(Color.gray);
             GraphicUtils.drawCenteredText("Zoom in to see 2D heatmap data", rect, g);
             return;

@@ -536,7 +536,6 @@ public class TrackLoader {
         Heatmap2DDataSource source = new Heatmap2DDataSource(locator);
         Heatmap2DTrack track = new Heatmap2DTrack(locator, source);
         track.setName(locator.getTrackName());
-        track.setHeight(250);
         newTracks.add(track);
     }
 
