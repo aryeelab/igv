@@ -84,7 +84,8 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
         String chr = frame.getChrName();
         int start = (int) frame.getOrigin();
         int end = (int) frame.getEnd();
-        if (end - start > MAX_VIEW_WINDOW_BP) {
+        int viewWidthBp = end - start + 1;
+        if (viewWidthBp > MAX_VIEW_WINDOW_BP) {
             return false;
         }
         LoadedDataInterval<Heatmap2DMatrix> interval = loadedIntervalCache.get(frame.getName());
@@ -98,17 +99,17 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
         String chr = referenceFrame.getChrName();
         int start = (int) referenceFrame.getOrigin();
         int end = (int) referenceFrame.getEnd() + 1;
+        int viewWidthBp = end - start;
 
-        if (end - start > MAX_VIEW_WINDOW_BP) {
+        if (viewWidthBp > MAX_VIEW_WINDOW_BP) {
             loadedIntervalCache.put(referenceFrame.getName(),
                     new LoadedDataInterval<>(chr, start, end, null));
             return;
         }
 
         // Expand range by 50% for panning
-        int w = end - start;
-        int expandedStart = Math.max(0, start - w / 2);
-        int expandedEnd = end + w / 2;
+        int expandedStart = Math.max(0, start - viewWidthBp / 2);
+        int expandedEnd = end + viewWidthBp / 2;
 
         try {
             Heatmap2DMatrix matrix = dataSource.getMatrix(chr, expandedStart, expandedEnd,
@@ -180,7 +181,7 @@ public class Heatmap2DTrack extends AbstractTrack implements IGVEventObserver {
         menu.add(sigmaItem);
 
         // Log transform toggle
-        JCheckBoxMenuItem logItem = new JCheckBoxMenuItem("Log2(1+x) Transform", logTransform);
+        JCheckBoxMenuItem logItem = new JCheckBoxMenuItem("Log2(x) Transform", logTransform);
         logItem.addActionListener(e -> {
             logTransform = logItem.isSelected();
             clearCaches();

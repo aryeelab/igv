@@ -116,7 +116,7 @@ public class Heatmap2DDataSource implements AutoCloseable {
      * @param yMin         minimum y value to include
      * @param yMax         maximum y value to include
      * @param sigma        Gaussian smoothing sigma (0 = no smoothing)
-     * @param logTransform whether to apply log2(1+x) transform
+     * @param logTransform whether to apply a log2(x) display transform
      * @param applyScale   whether to apply scale factors
      * @return Heatmap2DMatrix with processed data
      */
@@ -189,6 +189,7 @@ public class Heatmap2DDataSource implements AutoCloseable {
         }
 
         if (logTransform) {
+            // Clamp values below 1 so the display transform is max(0, log2(x)).
             double log2 = Math.log(2);
             for (int row = 0; row < numRows; row++) {
                 for (int col = 0; col < numCols; col++) {
